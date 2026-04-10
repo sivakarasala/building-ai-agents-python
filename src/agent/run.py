@@ -172,22 +172,7 @@ def run_agent(
         messages.append(assistant_message)
 
         # Execute each tool and add results to message history
-        import asyncio
-        import inspect
-
-        rejected = False
         for tc in tool_calls:
-            # Check for approval (callback may be sync or async)
-            approval = callbacks.on_tool_approval(tc.tool_name, tc.args)
-            if inspect.isawaitable(approval):
-                approved = asyncio.run(approval)
-            else:
-                approved = approval
-
-            if not approved:
-                rejected = True
-                break
-
             result = execute_tool(tc.tool_name, tc.args)
             callbacks.on_tool_call_end(tc.tool_name, result)
 
@@ -198,9 +183,6 @@ def run_agent(
             })
 
             report_token_usage()
-
-        if rejected:
-            break
 
     callbacks.on_complete(full_response)
     return messages
