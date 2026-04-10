@@ -68,7 +68,44 @@ This is sometimes called **ReAct** (Reason + Act). We will build this loop in le
 
 ## Code
 
+### `src/main.py`
+
+The simplest possible "agent" — one LLM call, no tools, no loop. We use OpenAI's **Responses API** (`client.responses.create`) from the start — it's the modern, recommended path and the same one we'll build the agent loop on in lesson 4.
+
+```python
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+
+client = OpenAI()
+
+response = client.responses.create(
+    model="gpt-5-mini",
+    input=[
+        {"role": "user", "content": "What is an AI agent in one sentence?"}
+    ],
+)
+
+print(response.output_text)
+```
+
+Run it:
+
+```bash
+python -m src.main
+```
+
+A couple of Responses-API-specific things to notice:
+
+- The conversation lives in **`input`** (a list of "input items"), not `messages`.
+- The convenience **`output_text`** field concatenates all assistant text from the response — much simpler than `response.choices[0].message.content`.
+- The system prompt (which we'll add in a moment) is passed via the **`instructions`** parameter, not as a `{"role": "system", ...}` item.
+
 ### `src/agent/system/prompt.py`
+
+Agents need personality and guidelines. We won't wire it in yet — that comes in lesson 4 when we build the actual agent loop — but defining it now keeps the file structure stable:
 
 ```python
 SYSTEM_PROMPT = """You are a helpful AI assistant. You provide clear, accurate, and concise responses to user questions.
@@ -80,60 +117,60 @@ Guidelines:
 - Stay focused on the user's actual question"""
 ```
 
-### `src/agent/run.py`
+### `src/types.py`
 
-The simplest possible "agent" — one LLM call, no tools, no loop. We use OpenAI's **Responses API** (`client.responses.create`) from the start — it's the modern, recommended path and the same one we'll build the agent loop on in lesson 4.
+The core data structures that the agent and UI will share. We won't use all of them immediately, but defining them now gives a clear picture of where we're headed:
 
 ```python
-from typing import Any
-from openai import OpenAI
-from dotenv import load_dotenv
-
-from src.agent.system.prompt import SYSTEM_PROMPT
-from src.types import AgentCallbacks
-
-load_dotenv()
-
-_client: OpenAI | None = None
-MODEL_NAME = "gpt-5-mini"
+from dataclasses import dataclass, field
+from typing import Any, Callable, Awaitable, Optional
 
 
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        _client = OpenAI()
-    return _client
+@dataclass
+class ToolCallInfo:
+    """Metadata about a tool the LLM wants to call."""
+    tool_call_id: str
+    tool_name: str
+    args: dict[str, Any]
 
 
-def run_agent(
-    user_message: str,
-    conversation_history: list[dict[str, Any]],
-    callbacks: AgentCallbacks,
-) -> list[dict[str, Any]]:
-    """Single-shot LLM call. Not a real agent yet — no tools, no loop."""
-    input_items = [
-        *conversation_history,
-        {"role": "user", "content": user_message},
-    ]
+@dataclass
+class ModelLimits:
+    """Token limits for a model."""
+    input_limit: int
+    output_limit: int
+    context_window: int
 
-    response = _get_client().responses.create(
-        model=MODEL_NAME,
-        instructions=SYSTEM_PROMPT,
-        input=input_items,
-    )
 
-    text = response.output_text or ""
-    callbacks.on_token(text)
-    callbacks.on_complete(text)
+@dataclass
+class TokenUsageInfo:
+    """Current token usage for display."""
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    context_window: int
+    threshold: float
+    percentage: float
 
-    return [*input_items, {"role": "assistant", "content": text}]
+
+@dataclass
+class AgentCallbacks:
+    """How the agent communicates back to the UI."""
+    on_token: Callable[[str], None]
+    on_tool_call_start: Callable[[str, Any], None]
+    on_tool_call_end: Callable[[str, str], None]
+    on_complete: Callable[[str], None]
+    on_tool_approval: Callable[[str, Any], Awaitable[bool]]
+    on_token_usage: Optional[Callable[[TokenUsageInfo], None]] = None
+
+
+@dataclass
+class ToolApprovalRequest:
+    """A pending tool approval for the UI to display."""
+    tool_name: str
+    args: Any
+    resolve: Callable[[bool], None]
 ```
-
-A couple of Responses-API-specific things to notice:
-
-- The system prompt is passed via the **`instructions`** parameter, not as a `{"role": "system", ...}` message in the input list.
-- The conversation history lives in **`input`** (a list of "input items") rather than `messages`.
-- The convenience **`output_text`** field concatenates all assistant text from the response — much simpler than `response.choices[0].message.content`.
 
 This is barely an agent because:
 - No tools — it can't take actions

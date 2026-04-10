@@ -16,7 +16,7 @@ We use OpenAI's **Responses API** (`client.responses.create`) — the newer, rec
 
 ## Code
 
-Replace the stub in `src/agent/run.py` with this:
+Create `src/agent/run.py`:
 
 ```python
 import json
