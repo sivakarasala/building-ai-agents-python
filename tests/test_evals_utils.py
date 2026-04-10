@@ -27,8 +27,10 @@ def test_build_mocked_tools():
             "mock_return": "the result",
         }
     })
-    assert defs[0]["function"]["name"] == "lookup"
-    assert defs[0]["function"]["parameters"]["properties"]["query"]["type"] == "string"
+    # Responses API flat format: name + parameters at top level, no nested "function"
+    assert defs[0]["type"] == "function"
+    assert defs[0]["name"] == "lookup"
+    assert defs[0]["parameters"]["properties"]["query"]["type"] == "string"
     assert execs["lookup"]({"query": "anything"}) == "the result"
 
 

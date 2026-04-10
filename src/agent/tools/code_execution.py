@@ -72,24 +72,22 @@ def execute_code_execute(args: dict[str, Any]) -> str:
 
 EXECUTE_CODE_TOOL = {
     "type": "function",
-    "function": {
-        "name": "execute_code",
-        "description": "Execute code for anything you need compute for. Supports Python, JavaScript, and TypeScript. Returns the output of the execution.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "description": "The code to execute",
-                },
-                "language": {
-                    "type": "string",
-                    "enum": ["python", "javascript", "typescript"],
-                    "description": "The programming language of the code",
-                    "default": "python",
-                },
+    "name": "execute_code",
+    "description": "Execute code for anything you need compute for. Supports Python, JavaScript, and TypeScript. Returns the output of the execution.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {
+                "type": "string",
+                "description": "The code to execute",
             },
-            "required": ["code"],
+            "language": {
+                "type": "string",
+                "enum": ["python", "javascript", "typescript"],
+                "description": "The programming language of the code",
+                "default": "python",
+            },
         },
+        "required": ["code"],
     },
 }

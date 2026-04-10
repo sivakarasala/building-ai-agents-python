@@ -27,16 +27,17 @@ def test_registry_has_expected_tools():
 
 
 def test_function_tool_definitions_well_formed():
+    # Responses API flat format: {"type": "function", "name": ..., "parameters": ...}
+    # plus provider-managed tools like {"type": "web_search"}
     for tool in ALL_TOOLS:
         assert "type" in tool
         if tool["type"] == "function":
-            assert "function" in tool
-            assert "name" in tool["function"]
-            assert "parameters" in tool["function"]
+            assert "name" in tool
+            assert "parameters" in tool
 
 
 def test_file_and_shell_subsets():
-    file_names = {t["function"]["name"] for t in FILE_TOOLS}
+    file_names = {t["name"] for t in FILE_TOOLS}
     assert file_names == {"read_file", "write_file", "list_files", "delete_file"}
-    shell_names = {t["function"]["name"] for t in SHELL_TOOLS}
+    shell_names = {t["name"] for t in SHELL_TOOLS}
     assert shell_names == {"run_command"}
