@@ -4,14 +4,15 @@
 
 Two new things in one lesson, because they're both about *the agent's relationship to context*.
 
-1. **Web search** — give the agent a way to look up things outside its training data via OpenAI's provider-managed `web_search_preview` tool. (No execution; the model handles it.)
+1. **Web search** — give the agent a way to look up things outside its training data via OpenAI's provider-managed `web_search` tool. (No execution; the model handles it server-side.)
 2. **Context management** — when the conversation grows past the model's context window threshold, summarize old messages so the agent can keep going.
 
 ## Key concepts
 
-- The web search tool has a different shape from function tools — it's `{"type": "web_search_preview"}`. The Chat Completions API doesn't currently accept it directly, so the agent loop filters tools by `type == "function"` before passing them to `chat.completions.create`. Add it to the registry but understand it would need the Responses API to actually run.
+- The web search tool has a different shape from function tools — it's just `{"type": "web_search"}`. This is a *provider-managed* tool: OpenAI runs the search server-side and inlines the results into the model's reasoning. You declare it in the tools list and the agent loop just lets it through — you never see a `function_call` for it and never need to return a `function_call_output`. This works because we're already on the **Responses API** (from lesson 4), which natively supports built-in tools alongside your custom function tools.
 - The threshold check uses `is_over_threshold(total, context_window)` which compares to `DEFAULT_THRESHOLD * context_window` (default 0.8 = 80%).
 - Compaction creates a fresh user/assistant pair: a `[CONVERSATION SUMMARY]` user message and an "I understand, let's continue" acknowledgment from the assistant. The original messages are dropped.
+- When summarizing for compaction we drop both `system` and `developer` messages, since the system prompt is sent separately via the `instructions` parameter on the next `responses.create` call.
 - Token usage callbacks fire on every message change so the UI can show a progress bar.
 
 ## Code
@@ -21,13 +22,18 @@ Two new things in one lesson, because they're both about *the agent's relationsh
 ```python
 from typing import Any
 
+# Web search is a provider-managed tool on the Responses API — OpenAI runs it
+# server-side and inlines the results into the model's reasoning. We just
+# declare it in the tools list; we never see a function_call for it and never
+# need to return a function_call_output.
 WEB_SEARCH_TOOL = {
-    "type": "web_search_preview",
+    "type": "web_search",
 }
 
 
 def web_search_execute(args: dict[str, Any]) -> str:
-    """Provider tools are executed by OpenAI, not us."""
+    """Provider tools are executed by OpenAI, not us. This stub exists only so
+    the registry has something to look up if the model ever surfaces it."""
     return "Provider tool web_search - executed by model provider"
 ```
 
@@ -100,22 +106,29 @@ def compact_conversation(
     messages: list[dict[str, Any]],
     model: str = "gpt-5-mini",
 ) -> list[dict[str, Any]]:
-    """Compact a conversation by summarizing it with an LLM."""
-    conversation_messages = [m for m in messages if m.get("role") != "system"]
+    """Compact a conversation by summarizing it with an LLM.
+
+    Takes a Responses API input-item array and returns a fresh, much shorter
+    one (summary as a user message + acknowledgment as an assistant message)
+    that the next call can build on.
+    """
+    # Drop system/developer messages — system prompt is sent separately
+    conversation_messages = [
+        m for m in messages
+        if m.get("role") not in ("system", "developer")
+    ]
 
     if not conversation_messages:
         return []
 
     conversation_text = messages_to_text(conversation_messages)
 
-    response = _get_client().chat.completions.create(
+    response = _get_client().responses.create(
         model=model,
-        messages=[
-            {"role": "user", "content": SUMMARIZATION_PROMPT + conversation_text}
-        ],
+        input=SUMMARIZATION_PROMPT + conversation_text,
     )
 
-    summary = response.choices[0].message.content
+    summary = response.output_text
 
     return [
         {
@@ -153,28 +166,30 @@ from src.agent.context import (
 from src.types import AgentCallbacks, ToolCallInfo, TokenUsageInfo
 ```
 
-At the top of `run_agent`, before building `messages`:
+At the top of `run_agent`, before building `input_items`:
 
 ```python
     model_limits = get_model_limits(MODEL_NAME)
 
+    # Compact if we're over the context budget
     working_history = filter_compatible_messages(conversation_history)
     pre_check_tokens = estimate_messages_tokens([
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": SYSTEM_PROMPT},
         *working_history,
         {"role": "user", "content": user_message},
     ])
-
     if is_over_threshold(pre_check_tokens.total, model_limits.context_window):
         working_history = compact_conversation(working_history, MODEL_NAME)
 ```
 
-After `messages` is built, define and call `report_token_usage`:
+After `input_items` is built, define and call `report_token_usage`:
 
 ```python
     def report_token_usage():
         if callbacks.on_token_usage:
-            usage = estimate_messages_tokens(messages)
+            usage = estimate_messages_tokens(
+                [{"role": "user", "content": SYSTEM_PROMPT}, *input_items]
+            )
             callbacks.on_token_usage(TokenUsageInfo(
                 input_tokens=usage.input,
                 output_tokens=usage.output,
@@ -189,10 +204,10 @@ After `messages` is built, define and call `report_token_usage`:
     report_token_usage()
 ```
 
-And add `report_token_usage()` calls after each tool result is appended inside the loop.
+And add `report_token_usage()` calls after each `function_call_output` is appended inside the loop.
 
 ## Exercises
 
 1. Lower `DEFAULT_THRESHOLD` to 0.3 and watch compaction kick in earlier. Look at the summary the model produces.
 2. Try a long multi-turn conversation about an unrelated topic, then ask the agent something that depends on the early messages — does the summary preserve enough?
-3. Wire `web_search` to actually run. Hint: switch the agent loop to the OpenAI Responses API for that single call.
+3. Ask the agent a question that needs current information (sports scores, today's news) and confirm that the `web_search` tool fires and returns fresh results from the open web.
