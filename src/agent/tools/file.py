@@ -60,79 +60,71 @@ def delete_file_execute(args: dict[str, Any]) -> str:
         return f"Error deleting file: {e}"
 
 
-# Tool definitions in OpenAI's format
+# Tool definitions in OpenAI Responses API format (flat — no nested "function" key)
 READ_FILE_TOOL = {
     "type": "function",
-    "function": {
-        "name": "read_file",
-        "description": "Read the contents of a file at the specified path. Use this to examine file contents.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path to the file to read",
-                }
-            },
-            "required": ["path"],
+    "name": "read_file",
+    "description": "Read the contents of a file at the specified path. Use this to examine file contents.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "The path to the file to read",
+            }
         },
+        "required": ["path"],
     },
 }
 
 WRITE_FILE_TOOL = {
     "type": "function",
-    "function": {
-        "name": "write_file",
-        "description": "Write content to a file at the specified path. Creates the file if it doesn't exist, overwrites if it does.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path to the file to write",
-                },
-                "content": {
-                    "type": "string",
-                    "description": "The content to write to the file",
-                },
+    "name": "write_file",
+    "description": "Write content to a file at the specified path. Creates the file if it doesn't exist, overwrites if it does.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "The path to the file to write",
             },
-            "required": ["path", "content"],
+            "content": {
+                "type": "string",
+                "description": "The content to write to the file",
+            },
         },
+        "required": ["path", "content"],
     },
 }
 
 LIST_FILES_TOOL = {
     "type": "function",
-    "function": {
-        "name": "list_files",
-        "description": "List all files and directories in the specified directory path.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "directory": {
-                    "type": "string",
-                    "description": "The directory path to list contents of",
-                    "default": ".",
-                }
-            },
+    "name": "list_files",
+    "description": "List all files and directories in the specified directory path.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "directory": {
+                "type": "string",
+                "description": "The directory path to list contents of",
+                "default": ".",
+            }
         },
     },
 }
 
 DELETE_FILE_TOOL = {
     "type": "function",
-    "function": {
-        "name": "delete_file",
-        "description": "Delete a file at the specified path. Use with caution as this is irreversible.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path to the file to delete",
-                }
-            },
-            "required": ["path"],
+    "name": "delete_file",
+    "description": "Delete a file at the specified path. Use with caution as this is irreversible.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "The path to the file to delete",
+            }
         },
+        "required": ["path"],
     },
 }

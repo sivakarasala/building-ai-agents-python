@@ -33,18 +33,16 @@ def run_command_execute(args: dict[str, Any]) -> str:
 
 RUN_COMMAND_TOOL = {
     "type": "function",
-    "function": {
-        "name": "run_command",
-        "description": "Execute a shell command and return its output. Use this for system operations, running scripts, or interacting with the operating system.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The shell command to execute",
-                }
-            },
-            "required": ["command"],
+    "name": "run_command",
+    "description": "Execute a shell command and return its output. Use this for system operations, running scripts, or interacting with the operating system.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": "The shell command to execute",
+            }
         },
+        "required": ["command"],
     },
 }
