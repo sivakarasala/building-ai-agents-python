@@ -29,8 +29,21 @@ cp .env.example .env
 
 ## Run the agent
 
+`pip install -e .` (above) registers an `agi` command on your `$PATH` (inside the venv) via the `[project.scripts]` entry in `pyproject.toml`. So you can run it either way:
+
 ```bash
+# Option 1 — module form (always works, no install needed)
 python -m src.main
+
+# Option 2 — installed CLI entrypoint (after `pip install -e .`)
+agi
+```
+
+Want it available globally like `npm i -g`? Use [pipx](https://pipx.pypa.io/), the Python equivalent for installing CLI apps in isolated environments:
+
+```bash
+pipx install .
+agi   # now on $PATH everywhere, no venv activation needed
 ```
 
 ## Run the test suite
