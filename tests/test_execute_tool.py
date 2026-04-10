@@ -1,5 +1,5 @@
 from src.agent.execute_tool import execute_tool
-from src.agent.tools import ALL_TOOLS, TOOL_EXECUTORS, FILE_TOOLS, SHELL_TOOLS
+from src.agent.tools import ALL_TOOLS, TOOL_EXECUTORS, FILE_TOOLS
 
 
 def test_execute_tool_unknown():
@@ -23,7 +23,7 @@ def test_execute_tool_handles_exception():
 def test_registry_has_expected_tools():
     names = set(TOOL_EXECUTORS.keys())
     assert {"read_file", "write_file", "list_files", "delete_file",
-            "run_command", "execute_code", "web_search"} <= names
+            "web_search"} <= names
 
 
 def test_function_tool_definitions_well_formed():
@@ -35,8 +35,6 @@ def test_function_tool_definitions_well_formed():
             assert "parameters" in tool["function"]
 
 
-def test_file_and_shell_subsets():
+def test_file_subset():
     file_names = {t["function"]["name"] for t in FILE_TOOLS}
     assert file_names == {"read_file", "write_file", "list_files", "delete_file"}
-    shell_names = {t["function"]["name"] for t in SHELL_TOOLS}
-    assert shell_names == {"run_command"}
