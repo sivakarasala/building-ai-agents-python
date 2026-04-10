@@ -62,13 +62,14 @@ def test_get_model_limits_unknown_returns_default():
     assert get_model_limits("mystery").context_window == DEFAULT_LIMITS.context_window
 
 
-def test_is_over_threshold():
-    assert is_over_threshold(900, 1000, 0.8) is True
-    assert is_over_threshold(700, 1000, 0.8) is False
+def test_is_over_threshold_stub_returns_false():
+    # Stub implementation in lesson-07 starter — students will replace it.
+    assert is_over_threshold(900, 1000, 0.8) is False
 
 
-def test_calculate_usage_percentage():
-    assert calculate_usage_percentage(50, 100) == 50.0
+def test_calculate_usage_percentage_stub_returns_zero():
+    # Stub implementation in lesson-07 starter — students will replace it.
+    assert calculate_usage_percentage(50, 100) == 0
 
 
 def test_filter_messages_keeps_user_system_tool():

@@ -22,8 +22,7 @@ def test_execute_tool_handles_exception():
 
 def test_registry_has_expected_tools():
     names = set(TOOL_EXECUTORS.keys())
-    assert {"read_file", "write_file", "list_files", "delete_file",
-            "web_search"} <= names
+    assert {"read_file", "write_file", "list_files", "delete_file"} <= names
 
 
 def test_function_tool_definitions_well_formed():

@@ -37,9 +37,9 @@ def is_over_threshold(
     threshold: float = DEFAULT_THRESHOLD,
 ) -> bool:
     """Check if token usage exceeds the threshold."""
-    return total_tokens > context_window * threshold
+    return False
 
 
 def calculate_usage_percentage(total_tokens: int, context_window: int) -> float:
     """Calculate usage percentage."""
-    return (total_tokens / context_window) * 100
+    return 0

@@ -6,16 +6,8 @@ from dotenv import load_dotenv
 from src.agent.tools import ALL_TOOLS, TOOL_EXECUTORS
 from src.agent.execute_tool import execute_tool
 from src.agent.system.prompt import SYSTEM_PROMPT
-from src.agent.context import (
-    estimate_messages_tokens,
-    get_model_limits,
-    is_over_threshold,
-    calculate_usage_percentage,
-    compact_conversation,
-    DEFAULT_THRESHOLD,
-)
 from src.agent.system.filter_messages import filter_compatible_messages
-from src.types import AgentCallbacks, ToolCallInfo, TokenUsageInfo
+from src.types import AgentCallbacks, ToolCallInfo
 
 load_dotenv()
 
@@ -37,18 +29,7 @@ def run_agent(
 ) -> list[dict[str, Any]]:
     """Run the agent loop. Returns the updated message history."""
 
-    model_limits = get_model_limits(MODEL_NAME)
-
-    # Filter and check if we need to compact
     working_history = filter_compatible_messages(conversation_history)
-    pre_check_tokens = estimate_messages_tokens([
-        {"role": "system", "content": SYSTEM_PROMPT},
-        *working_history,
-        {"role": "user", "content": user_message},
-    ])
-
-    if is_over_threshold(pre_check_tokens.total, model_limits.context_window):
-        working_history = compact_conversation(working_history, MODEL_NAME)
 
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -56,29 +37,9 @@ def run_agent(
         {"role": "user", "content": user_message},
     ]
 
-    # Report token usage
-    def report_token_usage():
-        if callbacks.on_token_usage:
-            usage = estimate_messages_tokens(messages)
-            callbacks.on_token_usage(TokenUsageInfo(
-                input_tokens=usage.input,
-                output_tokens=usage.output,
-                total_tokens=usage.total,
-                context_window=model_limits.context_window,
-                threshold=DEFAULT_THRESHOLD,
-                percentage=calculate_usage_percentage(
-                    usage.total, model_limits.context_window
-                ),
-            ))
-
-    report_token_usage()
-
     full_response = ""
 
     while True:
-        # Chat Completions API only accepts function/custom tools.
-        # Provider-managed tools (e.g. web_search_preview) are filtered out here;
-        # they would need the Responses API to be active.
         chat_tools = [t for t in ALL_TOOLS if t.get("type") == "function"]
         stream = _get_client().chat.completions.create(
             model=MODEL_NAME,
@@ -181,8 +142,6 @@ def run_agent(
                 "tool_call_id": tc.tool_call_id,
                 "content": result,
             })
-
-            report_token_usage()
 
     callbacks.on_complete(full_response)
     return messages
