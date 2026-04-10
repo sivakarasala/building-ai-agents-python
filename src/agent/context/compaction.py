@@ -40,24 +40,27 @@ def compact_conversation(
 ) -> list[dict[str, Any]]:
     """Compact a conversation by summarizing it with an LLM.
 
-    Returns a new messages array with a summary + acknowledgment.
+    Takes a Responses API input-item array and returns a fresh, much shorter
+    one (summary as a user message + acknowledgment as an assistant message)
+    that the next call can build on.
     """
-    # Filter out system messages — they're handled separately
-    conversation_messages = [m for m in messages if m.get("role") != "system"]
+    # Drop system/developer messages — system prompt is sent separately
+    conversation_messages = [
+        m for m in messages
+        if m.get("role") not in ("system", "developer")
+    ]
 
     if not conversation_messages:
         return []
 
     conversation_text = messages_to_text(conversation_messages)
 
-    response = _get_client().chat.completions.create(
+    response = _get_client().responses.create(
         model=model,
-        messages=[
-            {"role": "user", "content": SUMMARIZATION_PROMPT + conversation_text}
-        ],
+        input=SUMMARIZATION_PROMPT + conversation_text,
     )
 
-    summary = response.choices[0].message.content
+    summary = response.output_text
 
     return [
         {
