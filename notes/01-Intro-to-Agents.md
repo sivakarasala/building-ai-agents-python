@@ -82,7 +82,7 @@ Guidelines:
 
 ### `src/agent/run.py`
 
-The simplest possible "agent" — one LLM call, no tools, no loop:
+The simplest possible "agent" — one LLM call, no tools, no loop. We use OpenAI's **Responses API** (`client.responses.create`) from the start — it's the modern, recommended path and the same one we'll build the agent loop on in lesson 4.
 
 ```python
 from typing import Any
@@ -111,23 +111,29 @@ def run_agent(
     callbacks: AgentCallbacks,
 ) -> list[dict[str, Any]]:
     """Single-shot LLM call. Not a real agent yet — no tools, no loop."""
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+    input_items = [
         *conversation_history,
         {"role": "user", "content": user_message},
     ]
 
-    response = _get_client().chat.completions.create(
+    response = _get_client().responses.create(
         model=MODEL_NAME,
-        messages=messages,
+        instructions=SYSTEM_PROMPT,
+        input=input_items,
     )
 
-    text = response.choices[0].message.content or ""
+    text = response.output_text or ""
     callbacks.on_token(text)
     callbacks.on_complete(text)
 
-    return [*messages, {"role": "assistant", "content": text}]
+    return [*input_items, {"role": "assistant", "content": text}]
 ```
+
+A couple of Responses-API-specific things to notice:
+
+- The system prompt is passed via the **`instructions`** parameter, not as a `{"role": "system", ...}` message in the input list.
+- The conversation history lives in **`input`** (a list of "input items") rather than `messages`.
+- The convenience **`output_text`** field concatenates all assistant text from the response — much simpler than `response.choices[0].message.content`.
 
 This is barely an agent because:
 - No tools — it can't take actions
@@ -148,4 +154,4 @@ We will fix all three in lessons 2-4.
 1. **Run it.** Send a message and see the response.
 2. **Change the model.** Try `gpt-4o-mini` vs `gpt-5-mini` — compare quality and latency.
 3. **Tweak the system prompt.** Make it terse, make it verbose, make it pretend to be a pirate. Notice how much behavior comes from the prompt.
-4. **Print the raw response object.** Look at `usage`, `finish_reason`, and the message structure — these are the building blocks for the rest of the course.
+4. **Print the raw response object.** Look at `response.usage`, `response.output` (the typed output items), and `response.output_text` — these are the building blocks for the rest of the course.
