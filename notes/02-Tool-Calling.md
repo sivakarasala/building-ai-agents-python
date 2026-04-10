@@ -7,7 +7,7 @@ A model alone can only emit text. To do anything useful — read a file, run a q
 ## Key concepts
 
 - **Two-sided definition.** Each tool has (1) a JSON schema the model sees (`ALL_TOOLS`), and (2) a Python callable that runs when the model picks it (`TOOL_EXECUTORS`). Keeping these in lockstep is the registry's whole job.
-- **OpenAI function format.** A tool definition is `{"type": "function", "function": {"name": ..., "description": ..., "parameters": {...JSON schema...}}}`. The model uses the description + parameter docs to decide *when* to call it.
+- **OpenAI function format (Responses API, flat).** A tool definition is `{"type": "function", "name": ..., "description": ..., "parameters": {...JSON schema...}}` — name, description, and parameters live at the top level. (The older Chat Completions API nested these inside a `"function": {...}` key; the agent loop in lesson 4 uses the Responses API, so we use the flat shape from the start.) The model uses the description + parameter docs to decide *when* to call it.
 - **Dispatcher.** `execute_tool(name, args)` is one tiny function that looks up the executor in the registry, calls it, and stringifies the result. Errors and unknown tools are turned into strings the model can read on the next turn.
 - **Why separate?** The agent loop (next lesson) calls `execute_tool` without knowing which tools exist. Adding a new tool means appending to the registry — no edits to the loop.
 
