@@ -8,7 +8,7 @@ Now that the model can call tools, how do you know it picks the *right* tool for
 
 - **Eval data** — a small JSON-ish record with a `prompt`, the `tools` available to the model, and a `target` describing which tools were expected (or forbidden).
 - **Categories** — `golden` (must pick the right tool), `secondary` (nice to have), `negative` (must NOT call any tool).
-- **Executor** — runs one non-streaming chat completion with `tool_choice="auto"`, parses the tool calls, and returns the names. No tools are actually executed.
+- **Executor** — makes one non-streaming `responses.create` call on the OpenAI Responses API, walks `response.output` for `function_call` items, and returns the names. No tools are actually executed.
 - **Evaluators** — pure functions that take the executor result + target and return a 0..1 score: `tools_selected`, `tools_avoided`, `tool_selection_score` (precision/recall F1).
 - **Why no execution?** Single-turn evals are about *selection*, not behavior. Skipping execution makes them deterministic, fast, and free of side effects.
 
@@ -56,7 +56,13 @@ from src.agent.system.prompt import SYSTEM_PROMPT
 def build_messages(
     data: dict[str, Any],
 ) -> list[dict[str, str]]:
-    """Build message array from eval data."""
+    """Build message array from eval data.
+
+    Returns a Responses API input list. The system prompt is also returned in
+    the array (as a system message) so existing tests that index msgs[0] /
+    msgs[1] keep working — single_turn_executor pulls it out and passes it via
+    `instructions` instead.
+    """
     system_prompt = data.get("system_prompt") or SYSTEM_PROMPT
     return [
         {"role": "system", "content": system_prompt},
@@ -88,34 +94,42 @@ def single_turn_executor(
     data: dict[str, Any],
     available_tools: list[dict],
 ) -> SingleTurnResult:
-    """Run a single-turn evaluation. Gets tool selection without executing."""
-    messages = build_messages(data)
+    """Run a single-turn evaluation. Gets tool selection without executing.
 
+    Uses the Responses API. `available_tools` is a list of flat-format tool
+    definitions ({"type": "function", "name": ..., ...}).
+    """
+    msgs = build_messages(data)
+    # build_messages returns [system, user]; pull system out into `instructions`
+    system_prompt = msgs[0]["content"]
+    input_items = msgs[1:]
+
+    # Filter to only the tools the eval wants to expose
     tool_names_wanted = set(data["tools"])
-    tools = [
-        t for t in available_tools
-        if t["function"]["name"] in tool_names_wanted
-    ]
+    tools = [t for t in available_tools if t.get("name") in tool_names_wanted]
 
     model = "gpt-5-mini"
     if data.get("config") and data["config"].get("model"):
         model = data["config"]["model"]
 
-    response = _get_client().chat.completions.create(
+    response = _get_client().responses.create(
         model=model,
-        messages=messages,
+        instructions=system_prompt,
+        input=input_items,
         tools=tools if tools else None,
     )
 
-    message = response.choices[0].message
-
     tool_calls = []
     tool_names = []
-    if message.tool_calls:
-        for tc in message.tool_calls:
-            args = json.loads(tc.function.arguments)
-            tool_calls.append({"tool_name": tc.function.name, "args": args})
-            tool_names.append(tc.function.name)
+    for item in response.output:
+        item_dict = item.model_dump(exclude_none=True)
+        if item_dict.get("type") == "function_call":
+            try:
+                args = json.loads(item_dict.get("arguments") or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append({"tool_name": item_dict["name"], "args": args})
+            tool_names.append(item_dict["name"])
 
     return SingleTurnResult(
         tool_calls=tool_calls,
