@@ -20,36 +20,42 @@ def single_turn_executor(
     data: dict[str, Any],
     available_tools: list[dict],
 ) -> SingleTurnResult:
-    """Run a single-turn evaluation. Gets tool selection without executing."""
-    messages = build_messages(data)
+    """Run a single-turn evaluation. Gets tool selection without executing.
 
-    # Filter to only tools specified in data
+    Uses the Responses API. `available_tools` is a list of flat-format tool
+    definitions ({"type": "function", "name": ..., ...}).
+    """
+    msgs = build_messages(data)
+    # build_messages returns [system, user]; pull system out into `instructions`
+    system_prompt = msgs[0]["content"]
+    input_items = msgs[1:]
+
+    # Filter to only the tools the eval wants to expose
     tool_names_wanted = set(data["tools"])
-    tools = [
-        t for t in available_tools
-        if t["function"]["name"] in tool_names_wanted
-    ]
+    tools = [t for t in available_tools if t.get("name") in tool_names_wanted]
 
     model = "gpt-5-mini"
     if data.get("config") and data["config"].get("model"):
         model = data["config"]["model"]
 
-    response = _get_client().chat.completions.create(
+    response = _get_client().responses.create(
         model=model,
-        messages=messages,
+        instructions=system_prompt,
+        input=input_items,
         tools=tools if tools else None,
     )
 
-    message = response.choices[0].message
-
-    # Extract tool calls
     tool_calls = []
     tool_names = []
-    if message.tool_calls:
-        for tc in message.tool_calls:
-            args = json.loads(tc.function.arguments)
-            tool_calls.append({"tool_name": tc.function.name, "args": args})
-            tool_names.append(tc.function.name)
+    for item in response.output:
+        item_dict = item.model_dump(exclude_none=True)
+        if item_dict.get("type") == "function_call":
+            try:
+                args = json.loads(item_dict.get("arguments") or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append({"tool_name": item_dict["name"], "args": args})
+            tool_names.append(item_dict["name"])
 
     return SingleTurnResult(
         tool_calls=tool_calls,
@@ -59,17 +65,15 @@ def single_turn_executor(
 
 
 def multi_turn_with_mocks(data: dict[str, Any]) -> MultiTurnResult:
-    """Run a multi-turn evaluation with mocked tools."""
+    """Run a multi-turn evaluation with mocked tools, using the Responses API."""
     tool_definitions, executor_map = build_mocked_tools(data["mock_tools"])
 
-    # Build messages
+    # Build initial input items. If the test provides explicit messages, use
+    # them as-is (assumed to already be in Responses-API shape).
     if "messages" in data and data["messages"]:
-        messages = data["messages"]
+        input_items = list(data["messages"])
     else:
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": data["prompt"]},
-        ]
+        input_items = [{"role": "user", "content": data["prompt"]}]
 
     model = "gpt-5-mini"
     max_steps = 20
@@ -81,89 +85,61 @@ def multi_turn_with_mocks(data: dict[str, Any]) -> MultiTurnResult:
     steps: list[dict[str, Any]] = []
     final_text = ""
 
-    for step_num in range(max_steps):
-        response = _get_client().chat.completions.create(
+    for _step in range(max_steps):
+        response = _get_client().responses.create(
             model=model,
-            messages=messages,
+            instructions=SYSTEM_PROMPT,
+            input=input_items,
             tools=tool_definitions if tool_definitions else None,
         )
 
-        message = response.choices[0].message
-        finish_reason = response.choices[0].finish_reason
-
         step_data: dict[str, Any] = {}
+        step_tool_calls = []
+        step_tool_results = []
+        had_function_call = False
 
-        # Process tool calls
-        if message.tool_calls:
-            step_tool_calls = []
-            step_tool_results = []
+        for item in response.output:
+            item_dict = item.model_dump(exclude_none=True)
+            input_items.append(item_dict)
 
-            # Add assistant message to history
-            messages.append({
-                "role": "assistant",
-                "content": message.content,
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        },
-                    }
-                    for tc in message.tool_calls
-                ],
-            })
-
-            for tc in message.tool_calls:
-                tool_name = tc.function.name
-                args = json.loads(tc.function.arguments)
+            if item_dict.get("type") == "function_call":
+                had_function_call = True
+                tool_name = item_dict["name"]
+                try:
+                    args = json.loads(item_dict.get("arguments") or "{}")
+                except json.JSONDecodeError:
+                    args = {}
                 all_tool_calls.append(tool_name)
+                step_tool_calls.append({"tool_name": tool_name, "args": args})
 
-                step_tool_calls.append({
-                    "tool_name": tool_name,
-                    "args": args,
-                })
-
-                # Execute mock tool
                 executor = executor_map.get(tool_name)
                 result = executor(args) if executor else f"Unknown tool: {tool_name}"
+                step_tool_results.append({"tool_name": tool_name, "result": result})
 
-                step_tool_results.append({
-                    "tool_name": tool_name,
-                    "result": result,
+                input_items.append({
+                    "type": "function_call_output",
+                    "call_id": item_dict["call_id"],
+                    "output": result,
                 })
 
-                # Add tool result to history
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": result,
-                })
+        # Capture final assistant text from this step
+        text = getattr(response, "output_text", "") or ""
+        if text:
+            step_data["text"] = text
+            final_text = text
 
+        if step_tool_calls:
             step_data["tool_calls"] = step_tool_calls
             step_data["tool_results"] = step_tool_results
 
-        # Process text
-        if message.content:
-            step_data["text"] = message.content
-            final_text = message.content
-
         steps.append(step_data)
 
-        # Stop if no tool calls (LLM is done)
-        if finish_reason != "tool_calls":
-            messages.append({
-                "role": "assistant",
-                "content": message.content or "",
-            })
+        if not had_function_call:
             break
-
-    tools_used = list(set(all_tool_calls))
 
     return MultiTurnResult(
         text=final_text,
         steps=steps,
-        tools_used=tools_used,
+        tools_used=list(set(all_tool_calls)),
         tool_call_order=all_tool_calls,
     )

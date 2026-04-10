@@ -11,7 +11,24 @@ def estimate_tokens(text: str) -> int:
 
 
 def extract_message_text(message: dict[str, Any]) -> str:
-    """Extract text content from a message."""
+    """Extract text content from a Responses API input item.
+
+    Handles:
+      - role-based messages: {"role": ..., "content": str | list}
+      - typed items: function_call, function_call_output, web_search_call, …
+      - legacy Chat Completions shapes: assistant with tool_calls, role="tool"
+    """
+    item_type = message.get("type")
+
+    # Responses API typed items
+    if item_type == "function_call":
+        return f"{message.get('name', '')}({message.get('arguments', '')})"
+    if item_type == "function_call_output":
+        return str(message.get("output", ""))
+    if item_type and "content" not in message:
+        # other typed items (web_search_call, reasoning, etc.) — fall back to dump
+        return json.dumps(message)
+
     content = message.get("content")
 
     if isinstance(content, str):
@@ -32,7 +49,7 @@ def extract_message_text(message: dict[str, Any]) -> str:
         return " ".join(parts)
 
     if content is None:
-        # Check for tool calls
+        # Legacy Chat Completions tool_calls
         tool_calls = message.get("tool_calls", [])
         if tool_calls:
             return json.dumps(tool_calls)
@@ -49,8 +66,9 @@ class TokenUsage:
 
 
 def estimate_messages_tokens(messages: list[dict[str, Any]]) -> TokenUsage:
-    """Estimate token counts for a message array.
-    Separates input (user, system, tool) from output (assistant).
+    """Estimate token counts for a Responses API input item array.
+    Separates input (user/system/function results) from output (assistant text,
+    function calls, model-generated typed items).
     """
     input_tokens = 0
     output_tokens = 0
@@ -59,7 +77,17 @@ def estimate_messages_tokens(messages: list[dict[str, Any]]) -> TokenUsage:
         text = extract_message_text(message)
         tokens = estimate_tokens(text)
 
-        if message.get("role") == "assistant":
+        item_type = message.get("type")
+        role = message.get("role")
+
+        is_output = (
+            role == "assistant"
+            or item_type == "function_call"
+            or item_type == "reasoning"
+            or item_type == "web_search_call"
+        )
+
+        if is_output:
             output_tokens += tokens
         else:
             input_tokens += tokens
