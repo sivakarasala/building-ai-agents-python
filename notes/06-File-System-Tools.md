@@ -71,63 +71,56 @@ def delete_file_execute(args: dict[str, Any]) -> str:
         return f"Error deleting file: {e}"
 
 
+# Tool definitions in OpenAI Responses API format (flat — no nested "function" key)
 READ_FILE_TOOL = {
     "type": "function",
-    "function": {
-        "name": "read_file",
-        "description": "Read the contents of a file at the specified path.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "The path to the file to read"},
-            },
-            "required": ["path"],
+    "name": "read_file",
+    "description": "Read the contents of a file at the specified path.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "The path to the file to read"},
         },
+        "required": ["path"],
     },
 }
 
 WRITE_FILE_TOOL = {
     "type": "function",
-    "function": {
-        "name": "write_file",
-        "description": "Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string"},
-                "content": {"type": "string"},
-            },
-            "required": ["path", "content"],
+    "name": "write_file",
+    "description": "Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "content": {"type": "string"},
         },
+        "required": ["path", "content"],
     },
 }
 
 LIST_FILES_TOOL = {
     "type": "function",
-    "function": {
-        "name": "list_files",
-        "description": "List all files and directories in the specified directory.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "directory": {"type": "string", "default": "."},
-            },
+    "name": "list_files",
+    "description": "List all files and directories in the specified directory.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "directory": {"type": "string", "default": "."},
         },
     },
 }
 
 DELETE_FILE_TOOL = {
     "type": "function",
-    "function": {
-        "name": "delete_file",
-        "description": "Delete a file at the specified path. Use with caution — irreversible.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string"},
-            },
-            "required": ["path"],
+    "name": "delete_file",
+    "description": "Delete a file at the specified path. Use with caution — irreversible.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
         },
+        "required": ["path"],
     },
 }
 ```

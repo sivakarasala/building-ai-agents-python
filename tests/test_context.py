@@ -72,11 +72,14 @@ def test_calculate_usage_percentage_stub_returns_zero():
     assert calculate_usage_percentage(50, 100) == 0
 
 
-def test_filter_messages_keeps_user_system_tool():
+def test_filter_messages_keeps_user_and_typed_items():
+    # Responses API shape: role-based messages + typed function_call /
+    # function_call_output items.
     msgs = [
         {"role": "system", "content": "sys"},
         {"role": "user", "content": "hi"},
-        {"role": "tool", "tool_call_id": "x", "content": "ok"},
+        {"type": "function_call", "call_id": "x", "name": "f", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "x", "output": "ok"},
     ]
     assert filter_compatible_messages(msgs) == msgs
 
@@ -90,8 +93,8 @@ def test_filter_messages_drops_empty_assistant():
     assert len(out) == 1
 
 
-def test_filter_messages_keeps_assistant_with_tool_calls():
+def test_filter_messages_keeps_function_call_items():
     msgs = [
-        {"role": "assistant", "content": None, "tool_calls": [{"id": "x"}]},
+        {"type": "function_call", "call_id": "x", "name": "f", "arguments": "{}"},
     ]
     assert len(filter_compatible_messages(msgs)) == 1
